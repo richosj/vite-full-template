@@ -8,15 +8,12 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const projectName = 'vite-full-template'
 
-  // ✅ 무조건 상대경로 빌드 (절대경로 X)
   const basePath = './'
 
-  // ✅ src 루트의 모든 .html 페이지 리스트
   const pagesPath = path.resolve(__dirname, 'src')
   const pageFiles = fs.readdirSync(pagesPath)
     .filter(file => file.endsWith('.html') && file !== 'link-page.html')
 
-  // ✅ 각 페이지의 상단 메타데이터 읽기
   const pageMetaList = pageFiles.map(file => {
     const filePath = path.join(pagesPath, file)
     const content = fs.readFileSync(filePath, 'utf-8')
@@ -45,7 +42,7 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: '../dist',
       emptyOutDir: true,
-      assetsInlineLimit: 0, // ✅ 작은 파일도 전부 파일로 출력!
+      assetsInlineLimit: 0,
       rollupOptions: {
         input: Object.fromEntries(
           glob.sync('src/*.html').map(file => {
@@ -54,18 +51,22 @@ export default defineConfig(({ mode }) => {
           })
         ),
         output: {
-          // ✅ js는 assets/js/로 정리
           entryFileNames: 'assets/js/[name].js',
           chunkFileNames: 'assets/js/[name].js',
-          // ✅ css는 assets/css/로 정리
           assetFileNames: ({ name }) => {
             if (/\.(css)$/.test(name ?? '')) {
-              return 'assets/css/[name][extname]'
+              return 'assets/css/main[extname]'
             }
             if (/\.(png|jpe?g|gif|svg|webp)$/.test(name ?? '')) {
               return 'assets/images/[name][extname]'
             }
             return 'assets/[name][extname]'
+          }
+        },
+        // ✅ 공통 코드 별도 chunk로 분리
+        manualChunks(id) {
+          if (id.includes('/src/js/common/')) {
+            return 'common' // 👉 assets/js/common.js로 별도 chunk
           }
         }
       },
@@ -80,13 +81,11 @@ export default defineConfig(({ mode }) => {
       handlebars({
         partialDirectory: path.resolve(__dirname, 'src/components'),
         context: {
-          pages: pageMetaList,
-          cssPath: env.VITE_CSS_PATH
+          pages: pageMetaList
         }
       }),
-      // ✅ 빌드 후 crossorigin 자동 제거 플러그인
       {
-        name: 'remove-crossorigin',
+        name: 'cleanup-html',
         closeBundle() {
           const distPath = path.resolve(__dirname, 'dist')
           const htmlFiles = fs.readdirSync(distPath).filter(f => f.endsWith('.html'))
@@ -94,11 +93,12 @@ export default defineConfig(({ mode }) => {
           htmlFiles.forEach(file => {
             const filePath = path.join(distPath, file)
             let content = fs.readFileSync(filePath, 'utf-8')
-            content = content.replace(/ crossorigin/g, '') // crossorigin 삭제
+            content = content.replace(/ crossorigin/g, '')
+            content = content.replace(/<link rel="modulepreload" [^>]+?>/g, '')
             fs.writeFileSync(filePath, content)
           })
 
-          console.log('✅ 빌드 후 crossorigin 속성 제거 완료')
+          console.log('✅ 빌드 후 modulepreload & crossorigin 제거 완료')
         }
       }
     ],
