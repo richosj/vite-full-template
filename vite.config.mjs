@@ -43,6 +43,8 @@ export default defineConfig(({ mode }) => {
       outDir: '../dist',
       emptyOutDir: true,
       assetsInlineLimit: 0,
+      cssCodeSplit: true,
+      minify: false,
       rollupOptions: {
         input: Object.fromEntries(
           glob.sync('src/*.html').map(file => {
@@ -55,7 +57,7 @@ export default defineConfig(({ mode }) => {
           chunkFileNames: 'assets/js/[name].js',
           assetFileNames: ({ name }) => {
             if (/\.(css)$/.test(name ?? '')) {
-              return 'assets/css/main[extname]'
+              return 'assets/css/[name][extname]'
             }
             if (/\.(png|jpe?g|gif|svg|webp)$/.test(name ?? '')) {
               return 'assets/images/[name][extname]'
@@ -63,19 +65,25 @@ export default defineConfig(({ mode }) => {
             return 'assets/[name][extname]'
           }
         },
-        // ✅ 공통 코드 별도 chunk로 분리
         manualChunks(id) {
           if (id.includes('/src/js/common/')) {
-            return 'common' // 👉 assets/js/common.js로 별도 chunk
+            return 'common'
           }
         }
-      },
-      minify: mode === 'localbuild' ? false : 'esbuild'
+      }
+    },
+    esbuild: {
+      minify: false
+    },
+    css: {
+      postcss: {
+        plugins: []
+      }
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, 'src'),
-      },
+        '@': path.resolve(__dirname, 'src')
+      }
     },
     plugins: [
       handlebars({
@@ -84,6 +92,19 @@ export default defineConfig(({ mode }) => {
           pages: pageMetaList
         }
       }),
+      {
+        name: 'no-css-minify',
+        generateBundle(_, bundle) {
+          for (const fileName in bundle) {
+            if (fileName.endsWith('.css')) {
+              const chunk = bundle[fileName]
+              if ('code' in chunk) {
+                chunk.code = chunk.code.replace(/}/g, '}\n')
+              }
+            }
+          }
+        }
+      },
       {
         name: 'cleanup-html',
         closeBundle() {
@@ -101,6 +122,6 @@ export default defineConfig(({ mode }) => {
           console.log('✅ 빌드 후 modulepreload & crossorigin 제거 완료')
         }
       }
-    ],
+    ]
   }
 })
